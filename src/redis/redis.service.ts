@@ -20,7 +20,7 @@ import Redis from "ioredis";
 export class RedisService implements OnModuleDestroy, OnModuleInit{
     private redis: Redis;
 
-    constructor(private readOnly config:ConfigService){
+    constructor(private readonly config:ConfigService){
         this.redis = new Redis(this.config.redisUrl,{
             // ── Reconnect strategy ──────────────────────────────
             // Exponential backoff: 50ms → 100ms → 200ms → ... → 2000ms

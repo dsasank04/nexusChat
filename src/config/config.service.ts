@@ -33,6 +33,10 @@ export class ConfigService {
         return this.nodeEnv === 'production';
     }
 
+    get isDevelopment(): boolean {
+      return this.nodeEnv === 'development';
+    }
+
     get isTest(): boolean{
         return this.nodeEnv ==='test';
     }
@@ -60,6 +64,24 @@ export class ConfigService {
 
   get clientUrl(): string {
     return this.config.get<string>('CLIENT_URL') ?? 'http://localhost:5173';
+  }
+
+   // ── Database ✅ now active ───────────────────────────────
+  get databaseUrl(): string {
+    return this.config.getOrThrow<string>('DATABASE_URL');
+  }
+ 
+  get supabaseUrl(): string {
+    return this.config.getOrThrow<string>('SUPABASE_URL');
+  }
+ 
+  get supabaseServiceKey(): string {
+    return this.config.getOrThrow<string>('SUPABASE_SERVICE_KEY');
+  }
+ 
+  // ── Redis ✅ now active ──────────────────────────────────
+  get redisUrl(): string {
+    return this.config.getOrThrow<string>('REDIS_URL');
   }
 
   get rateLimits() {
