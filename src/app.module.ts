@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from './config/config.module';
+import { PrismaModule } from './prisma/prisma.module';
+import { RedisModule } from './redis/redis.module';
 
 // ─── Uncomment as you build each week ───────────────────────
 // Week 1 Day 3:
@@ -28,10 +30,9 @@ import { ConfigModule } from './config/config.module';
   imports: [
     // ── Step 2 complete ──────────────────────────────────────
     ConfigModule,          // validates .env + typed getters
-
+    PrismaModule,         // Prisma ORM + database connection
+    RedisModule,
     // ── Uncomment step by step as you build ─────────────────
-    // DatabaseModule,
-    // RedisModule,
     // EncryptionModule,
     // CacheModule,
     // UsersModule,

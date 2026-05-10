@@ -1,0 +1,168 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────────────────────
+//  USERS
+//  passwordHash is null for OAuth users (Google/GitHub)
+//  provider tracks how the user signed up
+// ─────────────────────────────────────────────────────────────
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String?  @map("password_hash")   // null for OAuth users
+  name         String?
+  avatarUrl    String?  @map("avatar_url")
+  provider     String   @default("email")        // 'email' | 'google' | 'github'
+  providerId   String?  @map("provider_id")      // Google/GitHub user ID
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  conversations Conversation[]
+  credentials   UserCredential[]
+  models        UserModel[]
+  switches      ModelSwitchLog[]
+  usage         UsageTracking[]
+
+  @@map("users")
+}
+
+// ─────────────────────────────────────────────────────────────
+//  CONVERSATIONS
+// ─────────────────────────────────────────────────────────────
+model Conversation {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  title     String   @default("New Chat")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages Message[]
+  switches ModelSwitchLog[]
+
+  // Index for fast user conversation list ordered by latest
+  @@index([userId, updatedAt(sort: Desc)])
+  @@map("conversations")
+}
+
+// ─────────────────────────────────────────────────────────────
+//  MESSAGES
+//  content is stored ENCRYPTED using AES-256-GCM
+//  Decrypt in messages.service.ts before returning to client
+// ─────────────────────────────────────────────────────────────
+model Message {
+  id             String   @id @default(uuid())
+  conversationId String   @map("conversation_id")
+  role           String                            // 'user' | 'assistant'
+  content        String                            // ← AES-256-GCM encrypted
+  modelUsed      String?  @map("model_used")       // 'gpt-4o' | 'claude-3-5-sonnet'
+  provider       String?                           // 'openai' | 'anthropic' | 'gemini'
+  tokensUsed     Int      @default(0) @map("tokens_used")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  // Relations
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  // Critical index — makes fetching all messages in a chat instant
+  @@index([conversationId, createdAt(sort: Asc)])
+  @@map("messages")
+}
+
+// ─────────────────────────────────────────────────────────────
+//  USER CREDENTIALS
+//  Stores encrypted API keys for each AI provider
+//  encryptedKey is AES-256-CBC encrypted — never stored plain
+//  Keys are decrypted server-side only, never sent to frontend
+// ─────────────────────────────────────────────────────────────
+model UserCredential {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  provider     String                            // 'openai' | 'anthropic' | 'gemini' | 'deepseek'
+  encryptedKey String   @map("encrypted_key")   // AES-256-CBC encrypted
+  isEnabled    Boolean  @default(true) @map("is_enabled")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // One API key per provider per user
+  @@unique([userId, provider])
+  @@map("user_credentials")
+}
+
+// ─────────────────────────────────────────────────────────────
+//  USER MODELS
+//  Which AI models each user has selected and enabled
+// ─────────────────────────────────────────────────────────────
+model UserModel {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  provider  String                            // 'openai' | 'anthropic' etc
+  modelName String   @map("model_name")       // 'gpt-4o' | 'claude-3-5-sonnet' etc
+  isEnabled Boolean  @default(true) @map("is_enabled")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // One entry per model per user
+  @@unique([userId, provider, modelName])
+  @@map("user_models")
+}
+
+// ─────────────────────────────────────────────────────────────
+//  MODEL SWITCH LOG
+//  Records every time a user switches AI model mid-conversation
+//  Powers the switch history in the dashboard
+// ─────────────────────────────────────────────────────────────
+model ModelSwitchLog {
+  id             String   @id @default(uuid())
+  conversationId String   @map("conversation_id")
+  userId         String   @map("user_id")
+  fromProvider   String   @map("from_provider")
+  toProvider     String   @map("to_provider")
+  fromModel      String   @map("from_model")
+  toModel        String   @map("to_model")
+  reason         String   @default("manual")    // 'manual' | 'token_limit' | 'error' | 'cost'
+  switchedAt     DateTime @default(now()) @map("switched_at")
+
+  // Relations
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, switchedAt(sort: Desc)])
+  @@index([userId, switchedAt(sort: Desc)])
+  @@map("model_switch_log")
+}
+
+// ─────────────────────────────────────────────────────────────
+//  USAGE TRACKING
+//  Tracks daily token usage per model per user
+//  Powers the dashboard charts and cost estimates
+//  Updated asynchronously via Bull queue after each message
+// ─────────────────────────────────────────────────────────────
+model UsageTracking {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  provider    String
+  modelName   String   @map("model_name")
+  tokensUsed  Int      @default(0) @map("tokens_used")
+  messagesCnt Int      @default(0) @map("messages_cnt")
+  trackedDate DateTime @default(now()) @map("tracked_date") @db.Date
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // One row per user per model per day — upsert increments it
+  @@unique([userId, provider, modelName, trackedDate])
+  @@index([userId, trackedDate(sort: Desc)])
+  @@map("usage_tracking")
+}
