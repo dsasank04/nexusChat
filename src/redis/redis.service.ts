@@ -39,7 +39,8 @@ export class RedisService implements OnModuleDestroy, OnModuleInit{
             },
 
              // ── TLS for Upstash (rediss:// protocol) ─────────────
-            tls: this.config.redisUrl.startsWith('rediss://') ? {rejectUnauthorized: false} : undefined,
+            // Certificates are verified (Upstash uses valid public certs)
+            tls: this.config.redisUrl.startsWith('rediss://') ? {} : undefined,
             
             // Connection Settings
             connectTimeout: 10_000,
