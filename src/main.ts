@@ -2,13 +2,15 @@ import { NestFactory, Reflector } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder} from '@nestjs/swagger';
 import { ConfigService} from '@nestjs/config';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { Request, Response } from 'express';
 import * as helmet from 'helmet';
 
 import { AppModule } from './app.module';
 import { HttpExceptionFilter} from './common/filters/http-exception.filter';
 import { LoggingInterceptor} from './common/interceptors/logging.interceptor';
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger: ['error', 'warn', 'debug'], // Suppress default NestJS logs — our LoggingInterceptor handles it
     bufferLogs: true, // Buffer logs until the app is ready or untill we attach out custome logger
   });
@@ -24,6 +26,14 @@ async function bootstrap() {
   const isProd = NODE_ENV === 'production';
 
   // ─────────────────────────────────────────────────────────────
+  //  TRUST PROXY
+  //  Render/Vercel sit behind one reverse proxy. Trusting 1 hop
+  //  makes req.ip the real client IP (used by RateLimitGuard)
+  //  instead of the proxy's IP shared by every user.
+  // ─────────────────────────────────────────────────────────────
+  app.set('trust proxy', 1);
+
+  // ─────────────────────────────────────────────────────────────
   //  SECURITY — HELMET
   //  Sets 14 HTTP security headers automatically
   //  Must be applied BEFORE CORS and routes
@@ -33,7 +43,7 @@ async function bootstrap() {
       // Content-Security-Policy — prevent XSS attacks
       contentSecurityPolicy: isProd ? {
         directives: {
-          defultSrc: ["'self'"],
+          defaultSrc: ["'self'"],
           scriptSrc: ["'self'"],
           styleSrc: ["'self'","'unsafe-inline'"],
           imgSrc: ["'self'","data:",'https:'],
@@ -82,7 +92,7 @@ async function bootstrap() {
   //  e.g. /api/auth/login, /api/chat/stream
   // ─────────────────────────────────────────────────────────────
   app.setGlobalPrefix('api', {
-    // Exclude /api/docs so Swagger works at root /api/docs not /api/api/docs
+    // Keep the health check at /health (not /api/health) for load balancers
     exclude: ['health'],
   });
  
@@ -133,10 +143,13 @@ async function bootstrap() {
   // ─────────────────────────────────────────────────────────────
   //  BODY SIZE LIMIT
   //  Prevents huge payload attacks
-  //  10kb is plenty for a chat message
+  //  useBodyParser replaces Nest's default parser (a plain app.use
+  //  would run AFTER it, so its limit would never apply).
+  //  150kb fits a 32,000-char message even if every char is
+  //  multi-byte UTF-8 (up to 4 bytes each), plus JSON overhead.
   // ─────────────────────────────────────────────────────────────
-  app.use(require('express').json({ limit: '10kb' }));
-  app.use(require('express').urlencoded({ extended: true, limit: '10kb' }));
+  app.useBodyParser('json', { limit: '150kb' });
+  app.useBodyParser('urlencoded', { extended: true, limit: '150kb' });
  
   // ─────────────────────────────────────────────────────────────
   //  SWAGGER — AUTO API DOCUMENTATION
@@ -375,7 +388,7 @@ Authorization: Bearer your_jwt_token_here
   //  Used by Docker, Render, and load balancers
   // ─────────────────────────────────────────────────────────────
   const httpAdapter = app.getHttpAdapter();
-  httpAdapter.get('/health', (_req, res) => {
+  httpAdapter.get('/health', (_req: Request, res: Response) => {
     res.status(200).json({
       status: 'ok',
       timestamp: new Date().toISOString(),

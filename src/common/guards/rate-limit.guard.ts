@@ -8,7 +8,7 @@ import {
   SetMetadata,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { Observable } from 'rxjs';
+import { Request } from 'express';
 import { RedisService } from 'src/redis/redis.service';
 
 // ─────────────────────────────────────────────────────────────
@@ -17,9 +17,11 @@ import { RedisService } from 'src/redis/redis.service';
 //  Apply to any route to set custom limits:
 //
 //  @UseGuards(RateLimitGuard)
-//  @RateLimit({ max: 5, windowSecs: 900, type: 'login' })
+//  @RateLimit(DEFAULT_LIMITS.login)
 //  @Post('login')
 //  login() { ... }
+//
+//  Routes without @RateLimit are not rate limited.
 // ─────────────────────────────────────────────────────────────
 
 export interface RateLimitConfig {
@@ -29,16 +31,15 @@ export interface RateLimitConfig {
 }
 
 export const RATE_LIMIT_KEY = 'rateLimit';
-export const RateLimit = (config: RateLimitConfig) => {
+export const RateLimit = (config: RateLimitConfig) =>
   SetMetadata(RATE_LIMIT_KEY, config);
-};
 
 // ─────────────────────────────────────────────────────────────
 //  DEFAULT LIMITS
-//  Used when no @RateLimit decorator is present
+//  Preset configs to pass into @RateLimit()
 // ─────────────────────────────────────────────────────────────
 
-const DEFAULT_LIMITS: Record<string, RateLimitConfig> = {
+export const DEFAULT_LIMITS: Record<string, RateLimitConfig> = {
   login: {
     max: 5,
     windowSecs: CACHE_TTL.RATE_LOGIN,
@@ -164,14 +165,9 @@ export class RateLimitGuard implements CanActivate {
     }
   }
 
+  // req.ip is the real client IP because main.ts sets 'trust proxy'.
+  // Never read X-Forwarded-For directly — clients can spoof it.
   private getIp(request: Request): string {
-    return (
-      (request.headers as any)
-        .get?.('x-forwarded-for')
-        ?.split(',')[0]
-        ?.trim() ??
-      (request as any).ip ??
-      'unknown'
-    );
+    return request.ip ?? 'unknown';
   }
 }

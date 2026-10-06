@@ -6,12 +6,12 @@
 //  encryptApiKey / decryptApiKey
 //  → AES-256-CBC
 //  → Used for storing user API keys (OpenAI, Anthropic etc.)
-//  → Key: ENCRYPTION_KEY from .env (32 chars)
+//  → Key: ENCRYPTION_KEY from .env (64 hex chars = 32 bytes)
 //
 //  encryptMessage / decryptMessage
 //  → AES-256-GCM (authenticated encryption)
 //  → Used for storing chat message content
-//  → Key: MESSAGE_KEY from .env (32 chars)
+//  → Key: MESSAGE_KEY from .env (64 hex chars = 32 bytes)
 //  → GCM includes an auth tag that detects tampering
 //
 //  WHY TWO SEPARATE KEYS?
@@ -31,7 +31,8 @@ import * as crypto from "crypto";
 
 const ALGORITHM_CBC = 'aes-256-cbc';
 const ALGORITHM_GCM = 'aes-256-gcm';
-const IV_LENGTH = 16; // AES block size
+const CBC_IV_LENGTH = 16; // AES block size
+const GCM_IV_LENGTH = 12; // 96-bit IV is the recommended size for GCM
 
 @Injectable()
 export class EncryptionService {
@@ -39,8 +40,9 @@ export class EncryptionService {
     private readonly messageKey : Buffer;
 
     constructor( private readonly config: ConfigService){
-        this.encryptionKey = Buffer.from(config.encryptionKey, 'utf-8');
-        this.messageKey = Buffer.from(config.messageKey, 'utf-8')
+        // Keys are 64 hex chars → 32 raw bytes = full 256-bit key
+        this.encryptionKey = Buffer.from(config.encryptionKey, 'hex');
+        this.messageKey = Buffer.from(config.messageKey, 'hex');
     }
 
     // ─────────────────────────────────────────────────────────
@@ -52,7 +54,7 @@ export class EncryptionService {
     // ─────────────────────────────────────────────────────────
 
     encryptApiKey(plainText: string): string {
-        const iv = crypto.randomBytes(IV_LENGTH);
+        const iv = crypto.randomBytes(CBC_IV_LENGTH);
         const cipher = crypto.createCipheriv(ALGORITHM_CBC, this.encryptionKey, iv);
         const encrypted = Buffer.concat([
             cipher.update(plainText, 'utf-8'),
@@ -93,13 +95,14 @@ export class EncryptionService {
     // ─────────────────────────────────────────────────────────
 
     encryptMessage(plainText: string): string {
-        const iv = crypto.randomBytes(IV_LENGTH);
+        const iv = crypto.randomBytes(GCM_IV_LENGTH);
         const cipher = crypto.createCipheriv(ALGORITHM_GCM, this.messageKey, iv);
-        const authTag = cipher.getAuthTag();
         const encrypted = Buffer.concat([
             cipher.update(plainText, 'utf-8'),
             cipher.final()
         ])
+        // Auth tag only exists after final() — calling it earlier throws
+        const authTag = cipher.getAuthTag();
         return [
             iv.toString('hex'),
             authTag.toString('hex'),

@@ -2,12 +2,10 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from './config/config.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
+import { EncryptionModule } from './encryption/encryption.module';
 
 // ─── Uncomment as you build each week ───────────────────────
 // Week 1 Day 3:
-// import { DatabaseModule }      from './database/database.module';
-// import { RedisModule }         from './redis/redis.module';
-// import { EncryptionModule }    from './encryption/encryption.module';
 // import { CacheModule }         from './cache/cache.module';
 // Week 1 Day 5:
 // import { UsersModule }         from './users/users.module';
@@ -32,8 +30,8 @@ import { RedisModule } from './redis/redis.module';
     ConfigModule,          // validates .env + typed getters
     PrismaModule,         // Prisma ORM + database connection
     RedisModule,
+    EncryptionModule,      // AES-256 for API keys + messages
     // ── Uncomment step by step as you build ─────────────────
-    // EncryptionModule,
     // CacheModule,
     // UsersModule,
     // AuthModule,

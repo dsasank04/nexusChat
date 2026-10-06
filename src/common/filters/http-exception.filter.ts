@@ -25,6 +25,21 @@ import { Request, Response } from 'express';
 //  - Never exposes internal DB error messages
 //  - Never reveals file paths or internal details
 // ─────────────────────────────────────────────────────────────
+// http-errors (used by body-parser) sets expose=true only for 4xx errors
+// whose message is safe to show to clients
+function isClientHttpError(
+  exception: unknown,
+): exception is Error & { status: number; expose: true } {
+  const err = exception as { status?: unknown; expose?: unknown };
+  return (
+    exception instanceof Error &&
+    typeof err.status === 'number' &&
+    err.status >= 400 &&
+    err.status < 500 &&
+    err.expose === true
+  );
+}
+
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
   constructor(private readonly reflector: Reflector) {}
@@ -52,6 +67,12 @@ export class HttpExceptionFilter implements ExceptionFilter {
       } else {
         message = exception.message;
       }
+    } else if (isClientHttpError(exception)) {
+      // Errors from Express middleware (body-parser etc.) carry their own
+      // 4xx status and a safe message — e.g. 413 payload too large,
+      // 400 malformed JSON. Pass those through instead of turning them into 500s.
+      statusCode = exception.status;
+      message = exception.message;
     } else {
       // Unknown error — something unexpected crashed
       statusCode = HttpStatus.INTERNAL_SERVER_ERROR;

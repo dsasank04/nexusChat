@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { ConfigModule as NestConfigModule } from '@nestjs/config';
 import { configValidationSchema } from './config.schema';
 import { ConfigService } from './config.service';
-import e from 'express';
 
 // ─────────────────────────────────────────────────────────────
 //  CONFIG MODULE
@@ -30,7 +29,7 @@ import e from 'express';
                 abortEarly: false,
 
                 //Dont throw on extra vars like system PATH,HOME, etc
-                allowUnkown:true,
+                allowUnknown:true,
             },
 
             //Dont expand varaiblaes like ${OTHER_VAR} in values

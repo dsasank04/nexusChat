@@ -75,23 +75,8 @@ export class ConfigService {
     return this.config.getOrThrow<string>('REDIS_URL');
   }
 
-  // ── Rate limits ─────────────────────────────────────────
-  get rateLimits() {
-    return {
-      login:    { max: 5,  windowSecs: 60 * 15 },  // 5 per 15min per IP
-      register: { max: 3,  windowSecs: 60 * 60 },  // 3 per hour per IP
-      ai:       { max: 20, windowSecs: 60       },  // 20 per min per user
-    };
-  }
-
-  // ── Cache TTLs (seconds) ─────────────────────────────────
-  get cacheTTL() {
-    return {
-      conversation:   60 * 30,           // 30 minutes
-      userModels:     60 * 60,           // 1 hour
-      tokenBlacklist: 60 * 60 * 24 * 7, // 7 days — matches JWT expiry
-    };
-  }
+  // Rate limits    → DEFAULT_LIMITS in common/guards/rate-limit.guard.ts
+  // Cache TTLs     → CACHE_TTL in common/constants/cache.constants.ts
 
   // ── Google OAuth ❌ uncomment when AuthModule is added ───
   // get google() {

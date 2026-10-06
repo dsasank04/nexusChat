@@ -30,19 +30,23 @@ export const configValidationSchema = Joi.object({
   // ─────────────────────────────────────────────────────────
   //  ENCRYPTION KEYS  ✅ active now
   //
-  //  Both must be EXACTLY 32 characters — AES-256 requirement
+  //  Both must be EXACTLY 64 hex characters (= 32 random bytes)
+  //  AES-256 needs a 32-byte key with full 256-bit entropy
   //  Must be different from each other
   // ─────────────────────────────────────────────────────────
 
-  ENCRYPTION_KEY: Joi.string().length(32).required().messages({
+  ENCRYPTION_KEY: Joi.string().hex().length(64).required().messages({
+    'string.hex': 'ENCRYPTION_KEY must be a hex string',
     'string.length':
-      "ENCRYPTION_KEY must be exactly 32 characters (generate with: node -e \"console.log(require('crypto').randomBytes(16).toString('hex'))\")",
+      "ENCRYPTION_KEY must be exactly 64 hex characters (generate with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\")",
     'any.required': 'ENCRYPTION_KEY is required',
   }),
 
-  MESSAGE_KEY: Joi.string().length(32).required().messages({
+  MESSAGE_KEY: Joi.string().hex().length(64).invalid(Joi.ref('ENCRYPTION_KEY')).required().messages({
+    'string.hex': 'MESSAGE_KEY must be a hex string',
     'string.length':
-      "MESSAGE_KEY must be exactly 32 characters (generate with: node -e \"console.log(require('crypto').randomBytes(16).toString('hex'))\")",
+      "MESSAGE_KEY must be exactly 64 hex characters (generate with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\")",
+    'any.invalid': 'MESSAGE_KEY must be different from ENCRYPTION_KEY',
     'any.required': 'MESSAGE_KEY is required',
   }),
 
