@@ -4,10 +4,10 @@ import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
 import { EncryptionModule } from './encryption/encryption.module';
 import { CacheModule } from './cache/cache.module';
+import { UsersModule } from './users/users.module';
 
 // ─── Uncomment as you build each week ───────────────────────
 // Week 1 Day 5:
-// import { UsersModule }         from './users/users.module';
 // import { AuthModule }          from './auth/auth.module';
 // Week 2:
 // import { ModelsModule }        from './models/models.module';
@@ -31,8 +31,8 @@ import { CacheModule } from './cache/cache.module';
     RedisModule,
     EncryptionModule,      // AES-256 for API keys + messages
     CacheModule,           // model cache, token blacklist, OAuth state
+    UsersModule,           // user lookup + creation (email & OAuth)
     // ── Uncomment step by step as you build ─────────────────
-    // UsersModule,
     // AuthModule,
     // ModelsModule,
     // ConversationsModule,
