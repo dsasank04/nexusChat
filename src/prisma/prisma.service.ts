@@ -80,6 +80,7 @@ export class PrismaService
     }
 
     await this.$transaction([
+      this.modelRating.deleteMany(),
       this.usageTracking.deleteMany(),
       this.modelSwitchLog.deleteMany(),
       this.message.deleteMany(),

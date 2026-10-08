@@ -7,20 +7,59 @@ datasource db {
 }
 
 // ─────────────────────────────────────────────────────────────
+//  ENUMS
+//  Values match the strings in common/constants/models.constants.ts
+//  so the DB rejects anything the app doesn't support.
+// ─────────────────────────────────────────────────────────────
+enum AuthProvider {
+  email
+  google
+  github
+
+  @@map("auth_provider")
+}
+
+enum MessageRole {
+  user
+  assistant
+  system
+
+  @@map("message_role")
+}
+
+enum AiProvider {
+  openai
+  anthropic
+  gemini
+  deepseek
+
+  @@map("ai_provider")
+}
+
+enum SwitchReason {
+  manual
+  token_limit
+  error
+  cost
+
+  @@map("switch_reason")
+}
+
+// ─────────────────────────────────────────────────────────────
 //  USERS
 //  passwordHash is null for OAuth users (Google/GitHub)
 //  provider tracks how the user signed up
 // ─────────────────────────────────────────────────────────────
 model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  passwordHash String?  @map("password_hash")   // null for OAuth users
+  id           String       @id @default(uuid())
+  email        String       @unique
+  passwordHash String?      @map("password_hash") // null for OAuth users
   name         String?
-  avatarUrl    String?  @map("avatar_url")
-  provider     String   @default("email")        // 'email' | 'google' | 'github'
-  providerId   String?  @map("provider_id")      // Google/GitHub user ID
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  avatarUrl    String?      @map("avatar_url")
+  provider     AuthProvider @default(email)
+  providerId   String?      @map("provider_id") // Google/GitHub user ID
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
 
   // Relations
   conversations Conversation[]
@@ -28,7 +67,10 @@ model User {
   models        UserModel[]
   switches      ModelSwitchLog[]
   usage         UsageTracking[]
+  ratings       ModelRating[]
 
+  // One account per Google/GitHub identity (NULLs allowed for email users)
+  @@unique([provider, providerId])
   @@map("users")
 }
 
@@ -36,9 +78,15 @@ model User {
 //  CONVERSATIONS
 // ─────────────────────────────────────────────────────────────
 model Conversation {
-  id        String   @id @default(uuid())
-  userId    String   @map("user_id")
-  title     String   @default("New Chat")
+  id     String @id @default(uuid())
+  userId String @map("user_id")
+  title  String @default("New Chat")
+
+  // Model the next message goes to — kept server-side so a
+  // switch survives a page reload. Null until the first message.
+  activeProvider AiProvider? @map("active_provider")
+  activeModel    String?     @map("active_model")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -58,14 +106,14 @@ model Conversation {
 //  Decrypt in messages.service.ts before returning to client
 // ─────────────────────────────────────────────────────────────
 model Message {
-  id             String   @id @default(uuid())
-  conversationId String   @map("conversation_id")
-  role           String                            // 'user' | 'assistant'
-  content        String                            // ← AES-256-GCM encrypted
-  modelUsed      String?  @map("model_used")       // 'gpt-4o' | 'claude-3-5-sonnet'
-  provider       String?                           // 'openai' | 'anthropic' | 'gemini'
-  tokensUsed     Int      @default(0) @map("tokens_used")
-  createdAt      DateTime @default(now()) @map("created_at")
+  id             String      @id @default(uuid())
+  conversationId String      @map("conversation_id")
+  role           MessageRole
+  content        String // ← AES-256-GCM encrypted
+  modelUsed      String?     @map("model_used") // null for user messages
+  provider       AiProvider? // null for user messages
+  tokensUsed     Int         @default(0) @map("tokens_used")
+  createdAt      DateTime    @default(now()) @map("created_at")
 
   // Relations
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
@@ -82,13 +130,13 @@ model Message {
 //  Keys are decrypted server-side only, never sent to frontend
 // ─────────────────────────────────────────────────────────────
 model UserCredential {
-  id           String   @id @default(uuid())
-  userId       String   @map("user_id")
-  provider     String                            // 'openai' | 'anthropic' | 'gemini' | 'deepseek'
-  encryptedKey String   @map("encrypted_key")   // AES-256-CBC encrypted
-  isEnabled    Boolean  @default(true) @map("is_enabled")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id           String     @id @default(uuid())
+  userId       String     @map("user_id")
+  provider     AiProvider
+  encryptedKey String     @map("encrypted_key") // AES-256-CBC encrypted
+  isEnabled    Boolean    @default(true) @map("is_enabled")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
 
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -103,12 +151,12 @@ model UserCredential {
 //  Which AI models each user has selected and enabled
 // ─────────────────────────────────────────────────────────────
 model UserModel {
-  id        String   @id @default(uuid())
-  userId    String   @map("user_id")
-  provider  String                            // 'openai' | 'anthropic' etc
-  modelName String   @map("model_name")       // 'gpt-4o' | 'claude-3-5-sonnet' etc
-  isEnabled Boolean  @default(true) @map("is_enabled")
-  createdAt DateTime @default(now()) @map("created_at")
+  id        String     @id @default(uuid())
+  userId    String     @map("user_id")
+  provider  AiProvider
+  modelName String     @map("model_name") // e.g. 'gpt-4o'
+  isEnabled Boolean    @default(true) @map("is_enabled")
+  createdAt DateTime   @default(now()) @map("created_at")
 
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -124,15 +172,15 @@ model UserModel {
 //  Powers the switch history in the dashboard
 // ─────────────────────────────────────────────────────────────
 model ModelSwitchLog {
-  id             String   @id @default(uuid())
-  conversationId String   @map("conversation_id")
-  userId         String   @map("user_id")
-  fromProvider   String   @map("from_provider")
-  toProvider     String   @map("to_provider")
-  fromModel      String   @map("from_model")
-  toModel        String   @map("to_model")
-  reason         String   @default("manual")    // 'manual' | 'token_limit' | 'error' | 'cost'
-  switchedAt     DateTime @default(now()) @map("switched_at")
+  id             String       @id @default(uuid())
+  conversationId String       @map("conversation_id")
+  userId         String       @map("user_id")
+  fromProvider   AiProvider   @map("from_provider")
+  toProvider     AiProvider   @map("to_provider")
+  fromModel      String       @map("from_model")
+  toModel        String       @map("to_model")
+  reason         SwitchReason @default(manual)
+  switchedAt     DateTime     @default(now()) @map("switched_at")
 
   // Relations
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
@@ -147,16 +195,16 @@ model ModelSwitchLog {
 //  USAGE TRACKING
 //  Tracks daily token usage per model per user
 //  Powers the dashboard charts and cost estimates
-//  Updated asynchronously via Bull queue after each message
+//  Updated after each assistant message
 // ─────────────────────────────────────────────────────────────
 model UsageTracking {
-  id          String   @id @default(uuid())
-  userId      String   @map("user_id")
-  provider    String
-  modelName   String   @map("model_name")
-  tokensUsed  Int      @default(0) @map("tokens_used")
-  messagesCnt Int      @default(0) @map("messages_cnt")
-  trackedDate DateTime @default(now()) @map("tracked_date") @db.Date
+  id          String     @id @default(uuid())
+  userId      String     @map("user_id")
+  provider    AiProvider
+  modelName   String     @map("model_name")
+  tokensUsed  Int        @default(0) @map("tokens_used")
+  messagesCnt Int        @default(0) @map("messages_cnt")
+  trackedDate DateTime   @default(now()) @map("tracked_date") @db.Date
 
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -165,4 +213,24 @@ model UsageTracking {
   @@unique([userId, provider, modelName, trackedDate])
   @@index([userId, trackedDate(sort: Desc)])
   @@map("usage_tracking")
+}
+
+// ─────────────────────────────────────────────────────────────
+//  MODEL RATINGS
+//  User's 1–5 rating of a model — powers the dashboard leaderboard
+//  The 1–5 range is enforced by a CHECK constraint in the migration
+// ─────────────────────────────────────────────────────────────
+model ModelRating {
+  id        String     @id @default(uuid())
+  userId    String     @map("user_id")
+  provider  AiProvider
+  modelName String     @map("model_name")
+  rating    Int
+  ratedAt   DateTime   @default(now()) @map("rated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, provider])
+  @@map("model_ratings")
 }

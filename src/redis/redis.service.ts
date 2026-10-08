@@ -87,6 +87,14 @@ export class RedisService implements OnModuleDestroy, OnModuleInit{
 
     async testConnection(): Promise<void> {
         try{
+            // With enableOfflineQueue: false, commands fail instantly until the
+            // connection is ready — so wait for 'ready' (max 10s) before pinging.
+            if (this.redis.status !== 'ready') {
+                await new Promise<void>((resolve, reject) => {
+                    const timer = setTimeout(() => reject(new Error('timed out waiting for connection')), 10_000);
+                    this.redis.once('ready', () => { clearTimeout(timer); resolve(); });
+                });
+            }
             await this.redis.ping();
             console.log('Redis connection successful');
         }
