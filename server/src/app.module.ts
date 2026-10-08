@@ -3,10 +3,9 @@ import { ConfigModule } from './config/config.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
 import { EncryptionModule } from './encryption/encryption.module';
+import { CacheModule } from './cache/cache.module';
 
 // ─── Uncomment as you build each week ───────────────────────
-// Week 1 Day 3:
-// import { CacheModule }         from './cache/cache.module';
 // Week 1 Day 5:
 // import { UsersModule }         from './users/users.module';
 // import { AuthModule }          from './auth/auth.module';
@@ -31,8 +30,8 @@ import { EncryptionModule } from './encryption/encryption.module';
     PrismaModule,         // Prisma ORM + database connection
     RedisModule,
     EncryptionModule,      // AES-256 for API keys + messages
+    CacheModule,           // model cache, token blacklist, OAuth state
     // ── Uncomment step by step as you build ─────────────────
-    // CacheModule,
     // UsersModule,
     // AuthModule,
     // ModelsModule,
